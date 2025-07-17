@@ -122,39 +122,30 @@ class ShellTool(BaseModel):
 		os.makedirs(self.working_dir, exist_ok=True)
 		
 		with console.status(f"[bold cyan]Executing: {self.command}"):
-			try:
-				result = subprocess.run(
-					self.command,
-					shell=True,
-					capture_output=True,
-					text=True,
-					cwd=self.working_dir,
-					timeout=self.timeout,
-					env=dict(os.environ, PYTHONPATH=os.getcwd())
-				)
-				code_blocks = extract_codeblocks(result.stdout)
-				if code_blocks:
-					code_file = pathlib.Path(self.working_dir)/"workspace"/f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.md"
-					code_file.write_text(code_blocks)
-					return f"Code blocks saved to {code_file}"
-				else:
-					return result.stdout.strip()
-			except subprocess.TimeoutExpired:
-				error_msg = f"Command timed out after {self.timeout} seconds"
-				console.print(f"[bold red]⏰ Timeout:[/bold red] {self.command}")
-				console.print(Panel(error_msg, title="Timeout Error", border_style="red"))
-				return f"Error: {error_msg}"
-		
-		if result.returncode != 0:
-			console.print(f"[bold red]❌ Command failed:[/bold red] {self.command}")
-			console.print(Panel(result.stderr.strip(), title="Error Output", border_style="red"))
-			return f"Error (exit code {result.returncode}): {result.stderr.strip()}"
-		
-		console.print(f"[bold green]✅ Command executed successfully:[/bold green] {self.command}")
-		if result.stdout.strip():
-			console.print(Panel(result.stdout.strip(), title="Command Output", border_style="green"))
-		
-		return result.stdout.strip() if result.stdout.strip() else "Command executed successfully (no output)"
+			result = subprocess.run(
+				self.command,
+				shell=True,
+				capture_output=True,
+				text=True,
+				cwd=self.working_dir,
+				timeout=self.timeout,
+				env=dict(os.environ, PYTHONPATH=os.getcwd())
+			)
+			code_blocks = extract_codeblocks(result.stdout) or result.stdout.strip()
+			if code_blocks:
+				code_file = pathlib.Path(self.working_dir)/"workspace"/f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.md"
+				code_file.write_text(code_blocks)
+				return f"Code blocks saved to {code_file}"
+			if result.returncode != 0:
+				console.print(f"[bold red]❌ Command failed:[/bold red] {self.command}")
+				console.print(Panel(result.stderr.strip(), title="Error Output", border_style="red"))
+				return f"Error (exit code {result.returncode}): {result.stderr.strip()}"
+			
+			console.print(f"[bold green]✅ Command executed successfully:[/bold green] {self.command}")
+			if result.stdout.strip():
+				console.print(Panel(code_blocks, title="Command Output", border_style="green"))
+			
+			return code_blocks
 
 
 class StreamingService(StreamingClient):
@@ -207,6 +198,7 @@ You can execute shell commands to:
 5. **Confirmation**: Ask for clarification on ambiguous requests
 6. **Documentation**: Explain complex operations briefly
 7. **Security**: Avoid commands that could compromise system security
+8. **Code Generation**: Format the code blocks in markdown format with code fences.
 
 ## COMMAND EXECUTION STRATEGY
 1. Parse user intent carefully
