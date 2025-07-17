@@ -1,7 +1,7 @@
 [project]
 name = "assemblyai-challenge-2"
 version = "0.1.0"
-description = "Add your description here"
+description = "Real-Time Voice Performance. Create the fastest, most responsive voice experience possible using Universal-Streaming. Build an application where sub-300ms latency matters - voice-controlled interfaces, gaming, live translation, instant commands. Demonstrate technical optimization, performance benchmarking, and creative speed-dependent use cases."
 readme = "README.md"
 requires-python = ">=3.10.15"
 dependencies = [
