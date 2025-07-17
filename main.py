@@ -1,5 +1,6 @@
 import json
 import os
+import pathlib
 import subprocess
 import sys
 import time
@@ -23,6 +24,7 @@ from rich.table import Table
 from rich.text import Text
 from rich.layout import Layout
 from rich.align import Align
+from markdown_normalization import extract_codeblocks
 
 load_dotenv()
 
@@ -130,6 +132,13 @@ class ShellTool(BaseModel):
 					timeout=self.timeout,
 					env=dict(os.environ, PYTHONPATH=os.getcwd())
 				)
+				code_blocks = extract_codeblocks(result.stdout)
+				if code_blocks:
+					code_file = pathlib.Path(self.working_dir)/"workspace"/f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.md"
+					code_file.write_text(code_blocks)
+					return f"Code blocks saved to {code_file}"
+				else:
+					return result.stdout.strip()
 			except subprocess.TimeoutExpired:
 				error_msg = f"Command timed out after {self.timeout} seconds"
 				console.print(f"[bold red]⏰ Timeout:[/bold red] {self.command}")
