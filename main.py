@@ -96,7 +96,6 @@ class StreamingService(StreamingClient):
 
 def on_begin(self: StreamingService, event: BeginEvent):
     print(f"Session started: {event.id}")
-    self.messages.append({"role": "system", "content": "You are a helpful assistant."})
 
 
 def on_turn(self: StreamingService, event: TurnEvent):
