@@ -7,8 +7,6 @@ requires-python = ">=3.10.15"
 dependencies = [
     "assemblyai[extras]>=0.42.0",
     "groq>=0.30.0",
-    "markdown-normalization>=0.0.1",
-    "psutil>=7.0.0",
     "python-dotenv>=1.1.1",
     "rich>=14.0.0",
 ]
