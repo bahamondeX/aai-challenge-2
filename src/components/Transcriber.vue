@@ -68,7 +68,7 @@ const searchVideos = async (): Promise<void> => {
   }
 };
 
-const startStreaming = (url: string, cookies: string): void => {
+const startStreaming = (url: string): void => {
   if (eventSource.value) {
     eventSource.value.close();
     eventSource.value = null;
@@ -81,7 +81,7 @@ const startStreaming = (url: string, cookies: string): void => {
   streamingUrl.value = url;
   isStreaming.value = true;
 
-  eventSource.value = new EventSource(`/api/stream?url=${encodeURIComponent(url)}&cookies=${encodeURIComponent(cookies)}`);
+  eventSource.value = new EventSource(`/api/stream?url=${encodeURIComponent(url)}`);
 
   eventSource.value.onmessage = (event: MessageEvent) => {
     try {
@@ -106,16 +106,6 @@ const startStreaming = (url: string, cookies: string): void => {
   };
 };
 
-const cookies = ref<string>('');
-
-const getCookies = async (): Promise<string> => {
-  const response = await fetch('/cookies.txt');
-  return response.text();
-};
-
-onMounted(async () => {
-  cookies.value = await getCookies();
-});
 
 const handleTurnEvent = (data: TurnEventData): void => {
   const newWords = data.words || [];
@@ -178,7 +168,6 @@ watch(currentTurnWords, async () => {
     <!-- Search & Stream Panel -->
     <Card class="border-0 shadow-lg bg-gradient-to-br from-slate-50 to-white">
       <CardHeader class="pb-4">
-        {{ cookies }}
         <CardTitle class="flex items-center gap-2">
           <Search class="h-5 w-5" />
           Search & Stream
@@ -219,7 +208,7 @@ watch(currentTurnWords, async () => {
               class="flex-1 h-11"
             />
             <Button
-              @click="startStreaming(streamingUrl, cookies)"
+              @click="startStreaming(streamingUrl)"
               :disabled="!streamingUrl"
               variant="secondary"
               class="h-11 px-6"
@@ -257,7 +246,7 @@ watch(currentTurnWords, async () => {
                   </a>
                 </div>
                 <Button
-                  @click="startStreaming(videoUrl, cookies)"
+                  @click="startStreaming(videoUrl)"
                   size="sm"
                   class="ml-4 flex-shrink-0"
                 >

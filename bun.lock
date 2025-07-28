@@ -23,7 +23,6 @@
         "vue": "*",
         "vue-router": "*",
         "vue-sonner": "^2.0.2",
-        "zod": "^4.0.10",
       },
       "devDependencies": {
         "@iconify/vue": "^5.0.0",
