@@ -35,16 +35,16 @@ app = FastAPI()
 
 # ------------------- YouTube Utils -------------------
 
-def get_stream_url(video_url: str, cookies_path: str = "cookies.txt") -> str:
-    ydl_opts = {
-        "format": "bestaudio",
-        "noplaylist": True,
-        "quiet": True,
-        "cookies": cookies_path,
-    }
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(video_url, download=False)
-        return info["url"]  # Direct stream URL to audio
+# def get_stream_url(video_url: str, cookies_path: str = "cookies.txt") -> str:
+#     ydl_opts = {
+#         "format": "bestaudio",
+#         "noplaylist": True,
+#         "quiet": True,
+#         "cookies": cookies_path,
+#     }
+#     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+#         info = ydl.extract_info(video_url, download=False)
+#         return info["url"]  # Direct stream URL to audio
 
 
 def get_ts_segments(url: str) -> tp.Generator[str, None, None]:
@@ -72,6 +72,30 @@ def search_youtube_videos(query: str) -> tp.Generator[str, None, None]:
     matches = set(pattern.findall(response.text))
     for match in matches:
         yield f"https://www.youtube.com/watch?v={match}"
+
+
+def get_stream_url(url:str) -> str:
+    """ Fetches the direct audio stream URL for a given YouTube video URL.
+    Args:
+        url (str): The YouTube video URL.
+    Returns:
+        str: The direct audio stream URL.
+    Raises:
+        RuntimeError: If the stream URL cannot be fetched.
+    """
+
+    try:
+        args = 'yt-dlp --cookies cookies.txt -f bestaudio --skip-download --print url "{}"'.format(url).split()
+        logger.debug(f"Running command: {' '.join(args)}")
+        result = subprocess.run(args, capture_output=True, text=True, check=True)
+        stream_url = result.stdout.strip()
+        if not stream_url:
+            raise ValueError("No stream URL found in output")
+        logger.debug(f"Stream URL: {stream_url}")
+        return stream_url
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Error fetching stream URL: {e}")
+        raise RuntimeError(f"Failed to get stream URL for {url}: {e}")
 
 # ------------------- Audio Handlers -------------------
 
@@ -242,10 +266,4 @@ app.mount("/", StaticFiles(directory="dist", html=True), name="static")
 async def spa_fallback(full_path: str):
     return FileResponse("dist/index.html")
 
-@app.get("/youtube_url")
-async def youtube_url(video_url: str):
-    args = "yt-dlp --cookies cookies.txt -f bestaudio --skip-download --print url {}".format(video_url).split()
-    output = subprocess.run(args, capture_output=True, text=True)
-    if output.returncode != 0:
-        raise RuntimeError(f"Failed to get YouTube URL: {output.stderr.strip()}")
-    return {"url": output.stdout.strip()}
+from pydantic import BaseModel
