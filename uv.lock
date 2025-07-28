@@ -79,7 +79,7 @@ requires-dist = [
     { name = "uvicorn", specifier = ">=0.35.0" },
     { name = "uvloop", specifier = ">=0.21.0" },
     { name = "websockets", specifier = ">=15.0.1" },
-    { name = "yt-dlp", specifier = ">=2025.7.21" },
+    { name = "yt-dlp", extras = ["browser"], specifier = ">=2025.7.21" },
 ]
 
 [[package]]

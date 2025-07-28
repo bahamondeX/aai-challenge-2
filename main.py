@@ -5,6 +5,7 @@ import subprocess
 import typing as tp
 import threading
 import queue
+import tempfile
 from concurrent.futures import ThreadPoolExecutor, Future
 
 import requests
@@ -16,7 +17,7 @@ from assemblyai.streaming.v3 import (
     TerminationEvent, TurnEvent
 )
 from dotenv import load_dotenv
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from loguru import logger
@@ -26,11 +27,10 @@ load_dotenv()
 
 AAI_API_KEY = os.environ["AAI_API_KEY"]
 
-YDL_OPTIONS = {
+BASE_YDL_OPTIONS = {
     "format": "bestaudio/best",
     "noplaylist": True,
     "quiet": True,
-    "cookies": "cookies.txt",
 }
 
 CHUNK_SIZE = 32768
@@ -41,19 +41,33 @@ TS_PREFETCH_COUNT = 3
 
 app = FastAPI()
 
-# ---- API Routes ----
 
-def get_stream_url(url: str) -> str:
-    with yt_dlp.YoutubeDL(YDL_OPTIONS) as ydl:
+# ---------------- Cookie Injection ----------------
+
+def write_cookie_file(session_cookie: str) -> str:
+    cookie_file = tempfile.NamedTemporaryFile(delete=False, mode="w", suffix=".txt")
+    cookie_file.write("# Netscape HTTP Cookie File\n")
+    cookie_file.write(".youtube.com\tTRUE\t/\tFALSE\t2147483647\tsession\t{}\n".format(session_cookie))
+    cookie_file.close()
+    return cookie_file.name
+
+
+# ---------------- YouTube Utils ----------------
+
+def get_stream_url(url: str, session_cookie: str = "") -> str:
+    opts = BASE_YDL_OPTIONS.copy()
+    if session_cookie:
+        opts["cookies"] = write_cookie_file(session_cookie)
+    with yt_dlp.YoutubeDL(opts) as ydl:
         info = ydl.extract_info(url, download=False)  # type: ignore
         stream_url = info["url"]  # type: ignore
         logger.info(f"Stream URL: {stream_url}")
-        return stream_url  # type: ignore
+        return stream_url
 
 
-def get_ts_segments(url: str) -> tp.Generator[str, None, None]:
+def get_ts_segments(url: str, session_cookie: str = "") -> tp.Generator[str, None, None]:
     try:
-        stream_url = get_stream_url(url)
+        stream_url = get_stream_url(url, session_cookie)
         response = requests.get(stream_url, timeout=10)
         response.raise_for_status()
     except requests.RequestException as e:
@@ -78,8 +92,10 @@ def search_youtube_videos(query: str) -> tp.Generator[str, None, None]:
         yield f"https://www.youtube.com/watch?v={match}"
 
 
-def get_audio_stream_pcm_s16le_optimized(url: str) -> tp.Generator[bytes, None, None]:
-    stream_url = get_stream_url(url)
+# ---------------- Audio Handlers ----------------
+
+def get_audio_stream_pcm_s16le_optimized(url: str, session_cookie: str = "") -> tp.Generator[bytes, None, None]:
+    stream_url = get_stream_url(url, session_cookie)
 
     process = subprocess.Popen([
         "ffmpeg", "-i", "pipe:0", "-f", "s16le", "-acodec", "pcm_s16le",
@@ -116,7 +132,6 @@ def get_audio_stream_pcm_s16le_optimized(url: str) -> tp.Generator[bytes, None, 
                     if buffer:
                         data_queue.put(buffer)
                     break
-
                 buffer += chunk
                 while len(buffer) >= PCM_MIN_BUFFER:
                     send_size = min(len(buffer), PCM_MAX_BUFFER)
@@ -145,13 +160,13 @@ def get_audio_stream_pcm_s16le_optimized(url: str) -> tp.Generator[bytes, None, 
     process.wait()
 
 
-def get_live_audio_optimized(url: str) -> tp.Generator[bytes, None, None]:
+def get_live_audio_optimized(url: str, session_cookie: str = "") -> tp.Generator[bytes, None, None]:
     segment_queue = queue.Queue[tp.Optional[Future[tp.Generator[bytes, None, None]]]](maxsize=TS_PREFETCH_COUNT)  # type: ignore
     executor = ThreadPoolExecutor(max_workers=2)
 
     def fetch_segments():
         try:
-            for ts_url in get_ts_segments(url):
+            for ts_url in get_ts_segments(url, session_cookie):
                 if segment_queue.qsize() < TS_PREFETCH_COUNT:
                     future = executor.submit(fetch_single_segment, ts_url)
                     segment_queue.put(future)
@@ -161,7 +176,7 @@ def get_live_audio_optimized(url: str) -> tp.Generator[bytes, None, None]:
             segment_queue.put(None)
 
     def fetch_single_segment(ts_url: str) -> tp.Generator[bytes, None, None]:
-        return get_audio_stream_pcm_s16le_optimized(ts_url)
+        return get_audio_stream_pcm_s16le_optimized(ts_url, session_cookie)
 
     threading.Thread(target=fetch_segments, daemon=True).start()
 
@@ -170,7 +185,6 @@ def get_live_audio_optimized(url: str) -> tp.Generator[bytes, None, None]:
             future = segment_queue.get(timeout=10)
             if future is None:
                 break
-
             segment_generator = future.result(timeout=30)
             for chunk in segment_generator:
                 yield chunk
@@ -179,9 +193,11 @@ def get_live_audio_optimized(url: str) -> tp.Generator[bytes, None, None]:
             break
 
 
-def handler(url: str, is_live: bool = False) -> tp.Generator[bytes, None, None]:
-    return get_live_audio_optimized(url) if is_live else get_audio_stream_pcm_s16le_optimized(url)
+def handler(url: str, is_live: bool = False, session_cookie: str = "") -> tp.Generator[bytes, None, None]:
+    return get_live_audio_optimized(url, session_cookie) if is_live else get_audio_stream_pcm_s16le_optimized(url, session_cookie)
 
+
+# ---------------- Transcription ----------------
 
 def on_begin(self: StreamingClient, event: BeginEvent):
     logger.info(f"Begin event: {event}")
@@ -199,7 +215,7 @@ def on_error(self: StreamingClient, event: StreamingError):
     logger.error(f"Error event: {event}")
 
 
-async def transcriber(url: str, is_live: bool = False):
+async def transcriber(url: str, is_live: bool = False, session_cookie: str = ""):
     client = StreamingClient(StreamingClientOptions(api_key=AAI_API_KEY))
     client.queue = asyncio.Queue[TurnEvent]()  # type: ignore
 
@@ -213,7 +229,7 @@ async def transcriber(url: str, is_live: bool = False):
     async def stream_audio():
         try:
             await asyncio.get_event_loop().run_in_executor(
-                None, lambda: client.stream(handler(url, is_live))
+                None, lambda: client.stream(handler(url, is_live, session_cookie))
             )
         except Exception as e:
             logger.error(f"Streaming error: {e}")
@@ -233,15 +249,24 @@ async def transcriber(url: str, is_live: bool = False):
             break
 
 
+# ---------------- API Routes ----------------
+
 @app.get("/api/search")
 def search(query: str):
     return {"videos": list(search_youtube_videos(query))}
 
 
 @app.get("/api/stream")
-async def stream(url: str, is_live: bool = Query(default=False)):
-    return EventSourceResponse(transcriber(url, is_live))
+async def stream(
+    request: Request,
+    url: str,
+    is_live: bool = Query(default=False)
+):
+    session_cookie = request.cookies.get("session", "")
+    return EventSourceResponse(transcriber(url, is_live, session_cookie))
 
+
+# ---------------- Frontend SPA Mount ----------------
 
 app.mount("/", StaticFiles(directory="dist", html=True), name="static")
 
