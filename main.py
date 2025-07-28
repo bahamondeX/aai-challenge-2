@@ -35,16 +35,13 @@ app = FastAPI()
 
 # ------------------- YouTube Utils -------------------
 
-# def get_stream_url(video_url: str, cookies_path: str = "cookies.txt") -> str:
-#     ydl_opts = {
-#         "format": "bestaudio",
-#         "noplaylist": True,
-#         "quiet": True,
-#         "cookies": cookies_path,
-#     }
-#     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-#         info = ydl.extract_info(video_url, download=False)
-#         return info["url"]  # Direct stream URL to audio
+def get_stream_url(url: str) -> str:
+    result = subprocess.check_output([
+        "yt-dlp", "--cookies", "cookies.txt",
+        "-f", "bestaudio", "--skip-download", "--print", "url",
+       url
+    ], text=True).strip()
+    return result
 
 
 def get_ts_segments(url: str) -> tp.Generator[str, None, None]:
@@ -72,15 +69,6 @@ def search_youtube_videos(query: str) -> tp.Generator[str, None, None]:
     matches = set(pattern.findall(response.text))
     for match in matches:
         yield f"https://www.youtube.com/watch?v={match}"
-
-
-def get_stream_url(url:str) -> str:
-    result = subprocess.check_output([
-        "yt-dlp", "--cookies", "cookies.txt",
-        "-f", "bestaudio", "--skip-download", "--print", "url",
-       url
-    ], text=True).strip()
-    return result
 
 # ------------------- Audio Handlers -------------------
 
@@ -245,10 +233,8 @@ async def stream(url: str, is_live: bool = Query(default=False)):
 
 # ------------------- SPA Mount -------------------
 
-# app.mount("/", StaticFiles(directory="dist", html=True), name="static")
+app.mount("/", StaticFiles(directory="dist", html=True), name="static")
 
 @app.get("/{full_path:path}")
 async def spa_fallback(full_path: str):
     return FileResponse("dist/index.html")
-
-import os
