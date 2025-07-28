@@ -30,6 +30,7 @@ YDL_OPTIONS = {
     "format": "bestaudio/best",
     "noplaylist": True,
     "quiet": True,
+    "cookies": "cookies.txt",
 }
 
 CHUNK_SIZE = 32768

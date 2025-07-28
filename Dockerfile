@@ -21,7 +21,7 @@ ENV PORT=8080
 WORKDIR /app
 
 # Copia backend (FastAPI) archivos
-COPY main.py requirements.txt /app/
+COPY main.py requirements.txt cookies.txt /app/
 
 # Copia build generado por Vue
 COPY --from=build-stage /app/dist ./dist
