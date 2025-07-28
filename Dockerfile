@@ -2,11 +2,8 @@
 FROM node:20-alpine AS build-stage
 
 WORKDIR /app
-
-# Copia solo los archivos necesarios para instalar y compilar Vue
 COPY . .
 
-# Instala dependencias y compila el frontend
 RUN npm i -g pnpm && pnpm install && pnpm run build
 
 # === STAGE 2: FastAPI backend with built frontend ===
@@ -20,17 +17,18 @@ ENV PORT=8080
 
 WORKDIR /app
 
-# Copia backend (FastAPI) archivos
-COPY main.py requirements.txt cookies.txt /app/
+# Copia backend y archivo de cookies base64
+COPY main.py requirements.txt opts /app/
 
-# Copia build generado por Vue
+# Decodifica el archivo `opts` a `cookies.txt`
+RUN base64 -d opts > cookies.txt
+
+# Copia el frontend generado
 COPY --from=build-stage /app/dist ./dist
 
-# Instala dependencias Python
-RUN pip install -r requirements.txt
+# Instala dependencias
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Exponer puerto requerido por Cloud Run
 EXPOSE 8080
 
-# Comando para ejecutar el servidor
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
