@@ -35,24 +35,16 @@ app = FastAPI()
 
 # ------------------- YouTube Utils -------------------
 
-def get_stream_url(url: str) -> str:
-    # Guardar cookies en archivo temporal
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".txt") as f:
-        cookie_path = f.name
-        subprocess.run([
-    "yt-dlp", "--cookies-from-browser", "chrome", "--print", "cookies", url
-], stdout=f)
-
+def get_stream_url(video_url: str, cookies_path: str = "cookies.txt") -> str:
     ydl_opts = {
-        "format": "bestaudio/best",
+        "format": "bestaudio",
         "noplaylist": True,
         "quiet": True,
-        "cookies": cookie_path
+        "cookies": cookies_path,
     }
-
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=False)
-        return info["url"]
+        info = ydl.extract_info(video_url, download=False)
+        return info["url"]  # Direct stream URL to audio
 
 
 def get_ts_segments(url: str) -> tp.Generator[str, None, None]:
