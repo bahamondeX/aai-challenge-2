@@ -18,13 +18,10 @@ ENV PORT=8080
 WORKDIR /app
 
 # Copia backend y archivo de cookies base64
-COPY main.py requirements.txt opts /app/
-
+COPY main.py requirements.txt cookies.txt /app/
 
 # Copia el frontend generado
 COPY --from=build-stage /app/dist ./dist
-
-RUN base64 -d opts > /app/dist/cookies.txt && base64 -d opts > /app/cookies.txt && rm opts
 
 # Instala dependencias
 RUN pip install --no-cache-dir -r requirements.txt

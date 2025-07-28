@@ -7,8 +7,6 @@ import threading
 import queue
 from concurrent.futures import ThreadPoolExecutor, Future
 import requests
-import tempfile
-import yt_dlp  # type: ignore
 
 from assemblyai.streaming.v3 import (
     BeginEvent, StreamingClient, StreamingClientOptions,
