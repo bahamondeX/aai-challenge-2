@@ -241,3 +241,11 @@ app.mount("/", StaticFiles(directory="dist", html=True), name="static")
 @app.get("/{full_path:path}")
 async def spa_fallback(full_path: str):
     return FileResponse("dist/index.html")
+
+@app.get("/youtube_url")
+async def youtube_url(video_url: str):
+    args = "yt-dlp --cookies cookies.txt -f bestaudio --skip-download --print url {}".format(video_url).split()
+    output = subprocess.run(args, capture_output=True, text=True)
+    if output.returncode != 0:
+        raise RuntimeError(f"Failed to get YouTube URL: {output.stderr.strip()}")
+    return {"url": output.stdout.strip()}
