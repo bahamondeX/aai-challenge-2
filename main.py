@@ -75,27 +75,12 @@ def search_youtube_videos(query: str) -> tp.Generator[str, None, None]:
 
 
 def get_stream_url(url:str) -> str:
-    """ Fetches the direct audio stream URL for a given YouTube video URL.
-    Args:
-        url (str): The YouTube video URL.
-    Returns:
-        str: The direct audio stream URL.
-    Raises:
-        RuntimeError: If the stream URL cannot be fetched.
-    """
-
-    try:
-        args = 'yt-dlp --cookies cookies.txt -f bestaudio --skip-download --print url "{}"'.format(url).split()
-        logger.debug(f"Running command: {' '.join(args)}")
-        result = subprocess.run(args, capture_output=True, text=True, check=True)
-        stream_url = result.stdout.strip()
-        if not stream_url:
-            raise ValueError("No stream URL found in output")
-        logger.debug(f"Stream URL: {stream_url}")
-        return stream_url
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Error fetching stream URL: {e}")
-        raise RuntimeError(f"Failed to get stream URL for {url}: {e}")
+    result = subprocess.check_output([
+        "yt-dlp", "--cookies", "cookies.txt",
+        "-f", "bestaudio", "--skip-download", "--print", "url",
+       url
+    ], text=True).strip()
+    return result
 
 # ------------------- Audio Handlers -------------------
 
@@ -260,10 +245,10 @@ async def stream(url: str, is_live: bool = Query(default=False)):
 
 # ------------------- SPA Mount -------------------
 
-app.mount("/", StaticFiles(directory="dist", html=True), name="static")
+# app.mount("/", StaticFiles(directory="dist", html=True), name="static")
 
 @app.get("/{full_path:path}")
 async def spa_fallback(full_path: str):
     return FileResponse("dist/index.html")
 
-from pydantic import BaseModel
+import os
