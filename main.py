@@ -5,32 +5,25 @@ import subprocess
 import typing as tp
 import threading
 import queue
-import tempfile
 from concurrent.futures import ThreadPoolExecutor, Future
-
 import requests
+import tempfile
 import yt_dlp  # type: ignore
-from dotenv import load_dotenv
-from fastapi import FastAPI, Query
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-from sse_starlette.sse import EventSourceResponse
-from loguru import logger
-from assemblyai.streaming.v3 import ( # type: ignore
+
+from assemblyai.streaming.v3 import (
     BeginEvent, StreamingClient, StreamingClientOptions,
     StreamingError, StreamingEvents, StreamingParameters,
     TerminationEvent, TurnEvent
 )
+from dotenv import load_dotenv
+from fastapi import FastAPI, Query
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from loguru import logger
+from sse_starlette.sse import EventSourceResponse
 
 load_dotenv()
-
 AAI_API_KEY = os.environ["AAI_API_KEY"]
-
-BASE_YDL_OPTIONS = {
-    "format": "bestaudio/best",
-    "noplaylist": True,
-    "quiet": True,
-}
 
 CHUNK_SIZE = 32768
 PCM_BUFFER_SIZE = 1600
@@ -40,35 +33,31 @@ TS_PREFETCH_COUNT = 3
 
 app = FastAPI()
 
+# ------------------- YouTube Utils -------------------
 
-# ---------------- YouTube Utils ----------------
-
-def get_stream_url(url: str, browser: str = "chrome") -> str:
-    with tempfile.NamedTemporaryFile(suffix=".txt", delete=False) as tmp:
-        cookie_file = tmp.name
-
-    try:
+def get_stream_url(url: str) -> str:
+    # Guardar cookies en archivo temporal
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".txt") as f:
+        cookie_path = f.name
         subprocess.run([
-            "yt-dlp", "--cookies-from-browser", browser,
-            "--cookies", cookie_file, url
-        ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    "yt-dlp", "--cookies-from-browser", "chrome", "--print", "cookies", url
+], stdout=f)
 
-        opts = BASE_YDL_OPTIONS.copy()
-        opts["cookies"] = cookie_file
+    ydl_opts = {
+        "format": "bestaudio/best",
+        "noplaylist": True,
+        "quiet": True,
+        "cookies": cookie_path
+    }
 
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(url, download=False)  # type: ignore
-            stream_url = info["url"]  # type: ignore
-            logger.info(f"Stream URL: {stream_url}")
-            return stream_url # type: ignore
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url, download=False)
+        return info["url"]
 
-    finally:
-        if os.path.exists(cookie_file):
-            os.remove(cookie_file)
 
-def get_ts_segments(url: str, browser: str = "chrome") -> tp.Generator[str, None, None]:
+def get_ts_segments(url: str) -> tp.Generator[str, None, None]:
     try:
-        stream_url = get_stream_url(url, browser)
+        stream_url = get_stream_url(url)
         response = requests.get(stream_url, timeout=10)
         response.raise_for_status()
     except requests.RequestException as e:
@@ -83,6 +72,7 @@ def get_ts_segments(url: str, browser: str = "chrome") -> tp.Generator[str, None
                 seen.add(ts_url)
                 yield ts_url
 
+
 def search_youtube_videos(query: str) -> tp.Generator[str, None, None]:
     response = requests.get(f"https://www.youtube.com/results?search_query={query}")
     response.raise_for_status()
@@ -91,11 +81,10 @@ def search_youtube_videos(query: str) -> tp.Generator[str, None, None]:
     for match in matches:
         yield f"https://www.youtube.com/watch?v={match}"
 
+# ------------------- Audio Handlers -------------------
 
-# ---------------- Audio Handlers ----------------
-
-def get_audio_stream_pcm_s16le_optimized(url: str, browser: str = "chrome") -> tp.Generator[bytes, None, None]:
-    stream_url = get_stream_url(url, browser)
+def get_audio_stream_pcm_s16le_optimized(url: str) -> tp.Generator[bytes, None, None]:
+    stream_url = get_stream_url(url)
 
     process = subprocess.Popen([
         "ffmpeg", "-i", "pipe:0", "-f", "s16le", "-acodec", "pcm_s16le",
@@ -159,13 +148,14 @@ def get_audio_stream_pcm_s16le_optimized(url: str, browser: str = "chrome") -> t
     process.terminate()
     process.wait()
 
-def get_live_audio_optimized(url: str, browser: str = "chrome") -> tp.Generator[bytes, None, None]:
-    segment_queue = queue.Queue[tp.Optional[Future[tp.Generator[bytes, None, None]]]](maxsize=TS_PREFETCH_COUNT)
+
+def get_live_audio_optimized(url: str) -> tp.Generator[bytes, None, None]:
+    segment_queue = queue.Queue[tp.Optional[Future[tp.Generator[bytes, None, None]]]](maxsize=TS_PREFETCH_COUNT)  # type: ignore
     executor = ThreadPoolExecutor(max_workers=2)
 
     def fetch_segments():
         try:
-            for ts_url in get_ts_segments(url, browser):
+            for ts_url in get_ts_segments(url):
                 if segment_queue.qsize() < TS_PREFETCH_COUNT:
                     future = executor.submit(fetch_single_segment, ts_url)
                     segment_queue.put(future)
@@ -175,7 +165,7 @@ def get_live_audio_optimized(url: str, browser: str = "chrome") -> tp.Generator[
             segment_queue.put(None)
 
     def fetch_single_segment(ts_url: str) -> tp.Generator[bytes, None, None]:
-        return get_audio_stream_pcm_s16le_optimized(ts_url, browser)
+        return get_audio_stream_pcm_s16le_optimized(ts_url)
 
     threading.Thread(target=fetch_segments, daemon=True).start()
 
@@ -191,11 +181,11 @@ def get_live_audio_optimized(url: str, browser: str = "chrome") -> tp.Generator[
             logger.error(f"Live stream error: {e}")
             break
 
-def handler(url: str, is_live: bool = False, browser: str = "chrome") -> tp.Generator[bytes, None, None]:
-    return get_live_audio_optimized(url, browser) if is_live else get_audio_stream_pcm_s16le_optimized(url, browser)
 
+def handler(url: str, is_live: bool = False) -> tp.Generator[bytes, None, None]:
+    return get_live_audio_optimized(url) if is_live else get_audio_stream_pcm_s16le_optimized(url)
 
-# ---------------- Transcription ----------------
+# ------------------- Transcription -------------------
 
 def on_begin(self: StreamingClient, event: BeginEvent):
     logger.info(f"Begin event: {event}")
@@ -209,7 +199,7 @@ def on_termination(self: StreamingClient, event: TerminationEvent):
 def on_error(self: StreamingClient, event: StreamingError):
     logger.error(f"Error event: {event}")
 
-async def transcriber(url: str, is_live: bool = False, browser: str = "chrome"):
+async def transcriber(url: str, is_live: bool = False):
     client = StreamingClient(StreamingClientOptions(api_key=AAI_API_KEY))
     client.queue = asyncio.Queue[TurnEvent]()  # type: ignore
 
@@ -223,7 +213,7 @@ async def transcriber(url: str, is_live: bool = False, browser: str = "chrome"):
     async def stream_audio():
         try:
             await asyncio.get_event_loop().run_in_executor(
-                None, lambda: client.stream(handler(url, is_live, browser))
+                None, lambda: client.stream(handler(url, is_live))
             )
         except Exception as e:
             logger.error(f"Streaming error: {e}")
@@ -242,23 +232,17 @@ async def transcriber(url: str, is_live: bool = False, browser: str = "chrome"):
             logger.error(f"Transcription error: {e}")
             break
 
-
-# ---------------- API Routes ----------------
+# ------------------- API Routes -------------------
 
 @app.get("/api/search")
 def search(query: str):
     return {"videos": list(search_youtube_videos(query))}
 
 @app.get("/api/stream")
-async def stream(
-    url: str,
-    is_live: bool = Query(default=False),
-    browser: str = Query(default="chrome")
-):
-    return EventSourceResponse(transcriber(url, is_live, browser))
+async def stream(url: str, is_live: bool = Query(default=False)):
+    return EventSourceResponse(transcriber(url, is_live))
 
-
-# ---------------- Frontend SPA Mount ----------------
+# ------------------- SPA Mount -------------------
 
 app.mount("/", StaticFiles(directory="dist", html=True), name="static")
 
