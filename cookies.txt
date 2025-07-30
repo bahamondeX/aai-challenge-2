@@ -11,4 +11,8 @@
 .youtube.com	TRUE	/	TRUE	1769245030	YT_DEVICE_MEASUREMENT_ID	NdcYsok=
 .youtube.com	TRUE	/	TRUE	1769243607	__Secure-ROLLOUT_TOKEN	CPidg9GO1byrMRCzw_qpkt-OAximqKOqkt-OAw%3D%3D
 .youtube.com	TRUE	/	TRUE	1816765030	__Secure-YT_TVFAS	t=487136&s=2
+<<<<<<< HEAD
 .youtube.com	TRUE	/tv	TRUE	1786525030	__Secure-YT_DERP	CMbjn9NI
+=======
+.youtube.com	TRUE	/tv	TRUE	1786525030	__Secure-YT_DERP	CMbjn9NI
+>>>>>>> f7db615819a37a55297450ee83e5f3d5cb966928

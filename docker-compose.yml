@@ -1,0 +1,30 @@
+version: "3.8"
+
+services:
+  app:
+    container_name: app
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080" # Expuesto solo si necesitas acceso directo
+    networks:
+      - default-network
+    env_file: 
+      - .env  # ✅ Esta línea es la forma correcta de declarar un archivo .env
+
+  proxy:
+    image: nginx:latest
+    container_name: proxy
+    depends_on:
+      - app
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+    ports:
+      - "80:80"
+    networks:
+      - default-network
+
+networks:
+  default-network:
+    driver: bridge

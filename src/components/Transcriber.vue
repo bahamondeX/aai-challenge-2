@@ -71,12 +71,31 @@ const transcriptStats = computed(() => ({
     : 0
 }));
 
+<<<<<<< HEAD
 /**
  * Starts streaming the transcript from a given YouTube video URL.
  * @param url The YouTube video URL.
  */
 function startStreaming(url: string, language: string): void {
   // Close any existing transcript stream
+=======
+const searchVideos = async (): Promise<void> => {
+  if (!searchQuery.value) return;
+  isSearching.value = true;
+  try {
+    const response = await fetch(`/api/search?query=${encodeURIComponent(searchQuery.value)}`);
+    const data: { videos: string[] } = await response.json();
+    searchResults.value = data.videos;
+  } catch (error) {
+    console.error('Error searching videos:', error);
+    searchResults.value = [];
+  } finally {
+    isSearching.value = false;
+  }
+};
+
+const startStreaming = (url: string): void => {
+>>>>>>> f7db615819a37a55297450ee83e5f3d5cb966928
   if (eventSource.value) {
     eventSource.value.close();
     eventSource.value = null;
@@ -93,9 +112,15 @@ function startStreaming(url: string, language: string): void {
     language
   });
 
+<<<<<<< HEAD
   eventSource.value = new EventSource(`/api/transcribe?${params.toString()}`);
   eventSource.value.onmessage = async (event: MessageEvent) => {
     if (isPaused.value) return;
+=======
+  eventSource.value = new EventSource(`/api/stream?url=${encodeURIComponent(url)}`);
+
+  eventSource.value.onmessage = (event: MessageEvent) => {
+>>>>>>> f7db615819a37a55297450ee83e5f3d5cb966928
     try {
       const data: TurnEventData = JSON.parse(event.data);
       if (data.type === 'Turn') {
@@ -117,6 +142,7 @@ function startStreaming(url: string, language: string): void {
   };
 };
 
+<<<<<<< HEAD
 /**
  * Stops the current streaming session.
  */
@@ -135,6 +161,8 @@ function stopStreaming(): void {
 function togglePause(): void {
   isPaused.value = !isPaused.value;
 };
+=======
+>>>>>>> f7db615819a37a55297450ee83e5f3d5cb966928
 
 /**
  * Clears the entire transcript.
@@ -359,6 +387,7 @@ watch(currentTurnWords, async () => {
           Real-time transcript streaming with AI-powered translation and intelligent turn detection
         </p>
 
+<<<<<<< HEAD
         <div v-if="isStreaming" class="flex items-center justify-center gap-8 mt-6">
           <div class="flex items-center gap-2 px-4 py-2 bg-white/80 backdrop-blur rounded-full border shadow-sm">
             <Mic class="h-4 w-4 text-blue-600" />
@@ -371,10 +400,43 @@ watch(currentTurnWords, async () => {
           <div class="flex items-center gap-2 px-4 py-2 bg-white/80 backdrop-blur rounded-full border shadow-sm">
             <Volume2 class="h-4 w-4 text-amber-600" />
             <span class="text-sm font-medium">{{ transcriptStats.avgConfidence }}% accuracy</span>
+=======
+    <!-- Search & Stream Panel -->
+    <Card class="border-0 shadow-lg bg-gradient-to-br from-slate-50 to-white">
+      <CardHeader class="pb-4">
+        <CardTitle class="flex items-center gap-2">
+          <Search class="h-5 w-5" />
+          Search & Stream
+        </CardTitle>
+        <CardDescription>
+          Find YouTube videos or paste a direct URL to start streaming transcripts
+        </CardDescription>
+      </CardHeader>
+      <CardContent class="space-y-6">
+        <!-- Search Section -->
+        <div class="space-y-3">
+          <div class="flex gap-3">
+            <Input
+              v-model="searchQuery"
+              @keyup.enter="searchVideos"
+              placeholder="Search YouTube videos..."
+              class="flex-1 h-11"
+            />
+            <Button 
+              @click="searchVideos" 
+              :disabled="!searchQuery || isSearching"
+              class="h-11 px-6"
+            >
+              <Loader2 v-if="isSearching" class="h-4 w-4 animate-spin mr-2" />
+              <Search v-else class="h-4 w-4 mr-2" />
+              Search
+            </Button>
+>>>>>>> f7db615819a37a55297450ee83e5f3d5cb966928
           </div>
         </div>
       </div>
 
+<<<<<<< HEAD
       <Card class="border-0 shadow-2xl bg-white/90 backdrop-blur-sm">
         <CardHeader class="pb-6">
           <div class="flex items-center justify-between">
@@ -389,6 +451,28 @@ watch(currentTurnWords, async () => {
                 </CardDescription>
               </div>
             </div>
+=======
+        <!-- Direct URL Section -->
+        <div class="space-y-3">
+          <Separator />
+          <div class="flex gap-3">
+            <Input
+              v-model="streamingUrl"
+              placeholder="Or paste YouTube video URL directly..."
+              class="flex-1 h-11"
+            />
+            <Button
+              @click="startStreaming(streamingUrl)"
+              :disabled="!streamingUrl"
+              variant="secondary"
+              class="h-11 px-6"
+            >
+              <Play class="h-4 w-4 mr-2" />
+              Stream
+            </Button>
+          </div>
+        </div>
+>>>>>>> f7db615819a37a55297450ee83e5f3d5cb966928
 
             <div class="flex items-center gap-3">
               <Languages class="h-5 w-5 text-muted-foreground" />
@@ -650,6 +734,7 @@ watch(currentTurnWords, async () => {
                     <Zap class="h-3 w-3 text-white" />
                   </div>
                 </div>
+<<<<<<< HEAD
                 <p class="text-2xl font-bold mb-2">Ready to Stream</p>
                 <p class="text-lg">Select a video to start streaming its transcript</p>
               </div>
@@ -660,6 +745,12 @@ watch(currentTurnWords, async () => {
                   :key="index"
                   class="group relative p-6 rounded-2xl border-l-4 shadow-sm hover:shadow-md transition-all duration-300"
                   :class="colors.find(c => c.text === segment.colorClass)?.bg || 'bg-gray-50 border-gray-200'"
+=======
+                <Button
+                  @click="startStreaming(videoUrl)"
+                  size="sm"
+                  class="ml-4 flex-shrink-0"
+>>>>>>> f7db615819a37a55297450ee83e5f3d5cb966928
                 >
                   <div class="flex items-start gap-4">
                     <div class="flex flex-col items-center gap-2">
